@@ -1,0 +1,190 @@
+Philosophy of software design
+Лекция 5
+
+Павел Косицын
+
+* Philosophy of software design
+
+.image psd.jpg _ 400
+
+* Complexity
+
+- Software development - это про инкрементальную работу над системой
+- Complexity - это насколько легко понимать что происходит в системе и вносить модификации в неё
+- Если система делится на независимые модули, то сложность распределяется между ними, причем пропорционально времени работы над ними
+- Вывод: сложность можно уменьшать за счет изоляции модуля, улучшения независимости модулей или упрощения самих модулей
+
+* Symptoms
+
+- Change amplification - нужно писать много кода в разных местах
+- Cognitive load - нужно держать в голове много информации
+- Unknown unknowns - не понятно, что еще нужно сделать
+- Bad tooling - долгая навигация, компиляция, дебаг, etc
+
+* Causes
+
+- Dependency - влечет change amplification + cognitive load
+- Obscurity - влечет cognitive load + unknown unknowns
+- Tooling - влечет bad tooling
+
+* Tactical vs strategic approach
+
+- Сложность системы инкрементальна
+- Tactical - решить задачи текущего дня
+- Strategic - тратить 10-20% времени на дизайн и инвестиции в задачу / код
+
+.image tactical-strategic.png _ 500
+
+* Modules
+
+- Модули - это части системы, которые между собой относительно независимы и в идеале могут разрабатываться без знания друг про друга
+- Для работы с зависимостями в модуле выделяют *интерфейс* и *имплементацию*
+: альтернативное определение модуля через интерфейс и имплементацию
+- Основной способ для снижения сложности - делать интерфейсы кратно проще, чем имплементацию
+: более простые интерфейсы помогают также не менять их если меняется имплементация
+- У интерфейсов есть формальная и неформальная составляющие
+
+* Deep modules
+
+- deep module - такой модуль, у которого хорошая инкапсуляция
+
+  io.Reader, io.Writer
+
+- shallow module - интерфейс не сильно проще имплементации
+
+  func (c *Cache) AddNilValueForAttribute(attr string) {
+    c.data[attr] = nil
+  }
+
+.image deep-module.png _ 400
+
+* Classitis
+
+Много shallow modules
+
+  FileInputStream fileStream = new FileInputStream(fileName);
+  BufferedInputStream bufferedStream = new BufferedInputStream(fileStream);
+  ObjectInputStream objectStream = new ObjectInputStream(bufferedStream);
+
+Наиболее частый случай буфферизированного чтения нужно делать дефолтом
+
+  ssize_t read(int fd, void* buffer, size_t count);
+  off_t lseek(int fd, off_t offset, int referencePosition);
+
+Частое использование - последовательное чтение. При этом есть возможность работать с random access
+
+* Information hiding
+
+Самая эффективная техника для достижения deep module - прятать детали, так чтобы их не было в интерфейсе
+
+Примеры: имплементация B-дерева, как шедулить горутины, как парсить JSON
+
+Важно - неэкспортируемая переменная не означает information hiding, если для неё есть геттеры и сеттеры
+
+Этим принципом имеет смысл пользоваться и в неэкспортируемых функциях - они сами собой являются небольшими модулями. Модули иехрархичны
+
+Также чем меньше поле структуры используется в методах, тем меньше зависимостей, а соответственно, проще
+
+* Information leakage
+
+* Temporal decomposition
+
+* Example: http server
+
+Нужно уметь принимать запрос из сокета, отдавать его на обработку клиентскому коду, записывать ответ
+
+Можно разбить на 3 структуры - будет проблема temporal decomposition. По response это наглядно:
+
+  type Response struct {
+    HTTPVersion string
+    StatusCode int
+    KeepAlive bool
+    Headers map[string][]string
+    Body []byte
+  }
+
+* General-purpose and special-purpose modules
+
+* Example: interactive text editor
+
+Можно вызывать backspace, delete, выделять текст и удалять выделенное или заменять выделенное на символ, вставлять из буффера текст в произвольное место
+
+Вариант интерфейса модуля, работающего с текстом
+
+  type TextManipulations interface {
+    Backspace(Cursor)
+    Delete(Cursor)
+    DeleteSelection(Selection)
+    Replace(Selection, rune)
+    Insert(Cursor, string)
+    // ...
+  }
+
+* Example: interactive text editor
+
+Более deep вариант
+
+  type TextManipulations interface {
+    InsertText(Position, string)
+    DeleteText(Position, Position)
+    ChangePosition(Position, int) Position
+  }
+
+Backspace
+
+  t.DeleteText(t.ChangePosition(p, -1), p)
+
+Delete
+
+  t.InsertText(p, t.ChangePosition(p, 1))
+
+* General-purpose module
+
+- Можно ли сделать то же самое меньшим числом методов? Если да, то интерфейсы будут меньше
+- Сколько раз будет использоваться каждый метод? Чем меньше, тем более он special-purpose
+- Легко ли пользоваться методами для моих задач? Если нет, то вероятно модуль слишком general-purpose
+
+* Different layer - different abstraction
+
+* Pass-through methods
+
+Как бороться:
+
+- Вызвать нижележащий модуль напрямую
+- Перераспределить работу между модулями
+- Объединить модули
+
+.image pass-through.png _ 500
+
+* Decorators
+
+* Pass-through variables
+
+Бороться можно посредством введения конфигурационной мега структуры, которая отдает данные в конструкторы всех структур при инициализации
+
+Можно инициализировать всё вручную, можно использовать DI фреймворк, например uber-fx
+
+* Pull complexity downwards
+
+* Better apart?
+
+Что если сделать много крошечных модулей?
+
+В таком подходе есть свои сложности:
+
+- Большое количество компонент делает навигацию более тяжелой. И больше интерфейсов
+- Приходится поддерживать дополнительный код, чтобы оперировать с модулями. Например, конвертации структур одного модуля в структуры другого модуля
+- Разделяются вещи, которые были вместе. Становится сложно следить за другими модулями или вообще знать, что они существуют. Это может быть норм, если компоненты реально независимы
+- Дублирование. Часть кода, которая была в одном модуле может начать дублироваться в нескольких
+
+* Better together?
+
+Когда имеет смысл смерджить модули:
+
+- Они используют общую информацию. Например, завязаны на синтаксис определенного формата файла
+- Они используются почти всегда вместе. При этом важно, чтобы это было в обе стороны
+- Они пересекаются концептуально. Например, каст строки в верхний регистр и конвертация числа в строку подходят под манипуляцию со строками
+- Сложно понять код одного модуля не посмотрев в код соседнего модуля
+
+* Better together or apart: examples
+

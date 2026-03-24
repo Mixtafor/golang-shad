@@ -1,0 +1,37 @@
+version: "2"
+
+run:
+  concurrency: 8
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  govet:
+    enable:
+      - shadow
+  # Мы убрали секцию stylecheck, так как она часто конфликтует в новых версиях
+  # Если она тебе очень нужна, сначала проверь её наличие через `golangci-lint linters`
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unconvert
+    # Мы убрали stylecheck и gosimple, так как они теперь
+    # либо входят в staticcheck, либо требуют другой установки
+
+issues:
+  exclude:
+    - Using the variable on range scope .* in function literal
+  exclude-use-default: true
+  max-per-linter: 0
+  max-same-issues: 0

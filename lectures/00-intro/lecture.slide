@@ -1,0 +1,699 @@
+Введение
+Лекция 1
+
+Павел Косицын
+
+* Добро пожаловать
+
+- Вы пришли на курс по Go
+
+.image gopher.png _ 400
+
+* Ссылки
+
+.link http://wiki.atp-fivt.org/index.php/Программирование_на_Go_весна_2025 Вики страница
+.link https://gitlab.atp-fivt.org/courses-public/golang/golang-2024s/go Репозиторий
+.link https://t.me/+kSg2lDTpeRY1YmNi Чат курса в телеграме
+
+* Что нас ждёт?
+
+- 12+ занятий
+- Семинарские задания после каждой лекции. *Дедлайн*14*дней.*
+- 1 _большое_ домашнее задание. *Дедлайн*3*недели.*
+.link http://wiki.atp-fivt.org/index.php/%D0%9F%D1%80%D0%BE%D0%B3%D1%80%D0%B0%D0%BC%D0%BC%D0%B8%D1%80%D0%BE%D0%B2%D0%B0%D0%BD%D0%B8%D0%B5_%D0%BD%D0%B0_Go_%D0%B2%D0%B5%D1%81%D0%BD%D0%B0_2025#:~:text=%D0%A3%D1%87%D0%B5%D0%B1%D0%BD%D1%8B%D0%B5%20%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82%D1%8B-,%D0%9A%D1%80%D0%B8%D1%82%D0%B5%D1%80%D0%B8%D0%B8%20%D0%BF%D0%BE%D0%BB%D1%83%D1%87%D0%B5%D0%BD%D0%B8%D1%8F%20%D0%BE%D1%86%D0%B5%D0%BD%D0%BA%D0%B8,-%D0%9A%D0%BE%D0%BB%D0%B8%D1%87%D0%B5%D1%81%D1%82%D0%B2%D0%BE%20%D0%B1%D0%B0%D0%BB%D0%BB%D0%BE%D0%B2%20%D0%B7%D0%B0 Критерий оценки
+
+* Go
+
+Concurrent
+: Concurrent. Реализовано на горутинах - зеленых потоках. Это встроено в язык и считается базовой функциональностью
+
+Garbage Collected
+: Garbage collected. Конкурентность сложно корректно реализовывать с ручным управлением памятью. Упрощает жизнь разработчику, уменьшает число багов, etc
+
+Systems
+: Systems. Язык используется в инфраструктурных проектах. Таких как jaeger, opentelemetry, kubernetes, prometheus. Сам go написан по большей части на go.
+
+Language
+
+
+* Современный мир
+
+- Море библиотек. Большие деревья зависимостей.
+: Нам нужен язык, который будет помогать контролировать зависимости at large. Что уменьшает сложность работы с языком.
+- Архитектура построена вокруг сервисов, которые общаются по сети.
+: Скорее вам придётся писать stateless сервис. Stateful сервисы общаются с базой данных по сети.
+- Многоядерные процессоры даже в телефонах.
+: Конкуретность - это уже must для поддержки в языках
+
+* Скорость разработки
+
+- Компиляция занимает много времени
+- Инструменты замедляются
+- Число зависимостей постоянно растёт
+- Ноутбуки не становятся быстрее
+: Закон Мура
+- Проекты продолжают расти
+: Код растет в квадратичной зависимости от времени - из-за числа людей и кода, написанного каждым человеком
+
+* Цели Go
+
+- Эффективность статической типизации. Удобство динамической типизации.
+: С днамической типизацией можно мало чего делать - надо кастовать всегда в статику
+- Type-safe и memory-safe.
+: При компиляции известно что можно использовать у типа. Никакой работы с арифметикой указателей
+- Хорошая поддержка многопоточности.
+- Эффективный сборщик мусора, почти без пауз.
+: STW происходит быстрый, без скана всего графа
+- Быстрая компиляция.
+- Эффективная работа с большими объемами кода.
+: Связано с быстрой компиляцией, потому что быстрее тулинг для линтинга
+
+* Compilation Demo
+
+  # 1 пакет за 200 ms
+  time go build -a -v math
+
+  # 84 пакета за 7 секунд
+  time go build -a -v github.com/golang/protobuf/...
+
+.image compiling.png
+
+* Принципы дизайна
+
+Небольшое число ортогональных фич.
+
+Простой синтаксис (понятный для людей *и* машин).
+
+Простая система типов. Объектно ориентированный, но без наследования. Вместо наследования используется композиция.
+: https://en.wikipedia.org/wiki/Composition_over_inheritance
+
+* Наследование и композиция
+
+Пусть Shape - замкнутый набор точек, умеет считать площадь фигуры
+
+Наследование
+
+  struct Square(Shape):
+  // ...
+
+  square.area();
+
+Композиция
+
+  type Square struct {
+    Shape
+  }
+
+  square.Area() // equivalent to square.Shape.Area()
+
+* Композиция вместо наследования
+С точки зрения возможностей имплементировать логику они эквивалентны - наследование проще применить неправильно. Представим ситуацию
+
+1. У меня в программе есть фигуры - круг, квадрат, прямоугольник. Они отнаследованы от класса фигуры
+2. Хочу добавить алгоритм который как-то рисует все фигуры
+3. Добавляю в класс фигуры метод draw
+4. Появляется фигура четырехмерный куб, которая понадобилась в одном из сложных алгоритмов
+5. Как нарисовать четырехмерный куб??? Можно конечно эксепшн кинуть, но постоянно это делать для всех четырехмерных?
+6. Разбиваю фигуру на базовую фигуру и рисовабельное (только метод draw)
+7. Занимаюсь рефакторингом. Что надо наследую от обоих, возможно страдаю от ромбовидного наследования
+
+С композицией и интерфейсами с duck typing рефакторить ничего не надо - надо в алгоритме принимать упрощенный интерфейс и не реализовывать draw
+
+* Композиция вместо наследования
+
+Первая версия
+
+.image shape_wrong.png
+
+* Композиция вместо наследования
+
+Вторая версия
+
+.image shape_correct.png
+
+* Hello World
+
+.play -edit helloworld/helloworld.go
+
+: Как запустить. В презентации и в CLI.
+: Что такое пакет.
+: Импорты. fmt - стандартная библиотека.
+: Как вызывать функцию из пакета, экспортируемые/неэкспортируемые символы
+: Пакет main.
+: Почему странный синтаксис функции
+: Строки utf-8
+: Автоматическое форматирование.
+: goimports
+
+* echo
+
+.play -edit echo/echo.go
+
+: var создаёт переменную. Инициализация zero value.
+: Есть только постинкремент. Для когнитивного упрощения жизни
+: Имплементация строк, сложение в цикле
+
+* For loop
+
+Полная форма.
+
+    for initialization; condition; post {
+        // statements
+    }
+
+Как while.
+
+    for condition {
+        // statements
+    }
+
+Бесконечный цикл.
+
+    for {
+        // statements
+    }
+
+* echo2
+
+.play -edit echo2/echo2.go
+
+: Слайсы. s[n:m], s[i], len(s).
+
+* Range
+
+По контейнерам - слайсам, мапам и каналам
+
+Полная форма.
+
+    for i, v := range slice {
+        // ...
+    }
+
+Только индекс.
+
+    for i := range slice {
+        // ...
+    }
+
+Индекс не используется.
+
+    for _, v := range slice {
+        // ...
+    }
+
+: Вообще в range первый элемент итерации - ключ контейнера, второй - значение.
+
+* Range
+    
+От 0 до N.
+
+    for i := range 100 {
+        // ...
+    }
+
+По итераторам
+
+    for _, v : = range slices.Reversed(slice) {
+        // ...
+    }
+
+
+* Переменные
+
+    s := ""
+    var s string
+    var s = ""
+    var s string = ""
+
+: Третий вариант только для top-level переменных.
+: Четвертый вариант только для интерфейсов.
+
+* uniq
+
+.play -edit uniq/uniq.go
+
+: map. Создаётся через make(). Значения инициализируются нулём. Ключ должен иметь ==.
+: Итерация по map.
+: bufio.Scanner.
+: Printf.
+
+* Printf
+
+  %d         decimal integer
+  %x, %o, %b integer in hexade cimal, octal, binary
+  %f, %g, %e floating-point number: 3.141593 3.141592653589793 3.141593e+00
+  %t         boolean: true or false
+  %c         rune (Unicode code point)
+  %s         string
+  %q         quoted string "abc" or rune 'c'
+  %v         any value in a natural format
+  %T         type of any value
+  %%         literal percent sign (no operand)
+
+Функции форматирования заканчиваются на `f`. `fmt.Errorf`, `log.Printf`. 
+
+* urlfetch
+
+.code urlfetch/urlfetch.go /func main/,/^}/
+
+: http.Get
+: os.File
+: Readall
+: Ручной Close не забывать. Вычитать тело не забывать (эффективный способ если тело не нужно - дальше)
+: b - []byte, можно fmt.Println(string(b))
+
+* fetchall
+
+.code fetchall/fetchall.go /func main/,/^}/
+
+: Канал tldr - можно писать, читать, закрывать. Блокирующий по умолчанию
+: Пакет time - очень удобная работа со временем
+
+* fetchall
+
+.code fetchall/fetchall.go /func fetch/,/^}/
+
+: fun fact - можно указывать входящим параметром канал исключительно на запись
+
+* webserver
+
+.code web/web.go
+
+: fun fact - можно слушать на порту 0. Это произвольный порт.
+
+* counter
+
+.code counter/counter.go  /var/,
+
+: Глобальный мьютекс - это конечно плохо. Его нельзя копировать
+
+* switch
+
+  switch coinflip() {
+  case "heads":
+      heads++
+  case "tails":
+      tails++
+  default:
+      fmt.Println("landed on edge!")
+  }
+
+_tagless_ switch.
+
+  func Signum(x int) int {
+      switch {
+      case x > 0:
+          return +1
+      default:
+          return 0
+      case x < 0:
+          return -1
+      }
+  }
+
+: В си только свитч по числу, в го - по любому значению, по условию, по типу. Есть ключевое слово fallthrough вместо обязательного break.
+
+* Other
+
+Struct
+
+  type Point struct {
+      X, Y int
+  }
+  p := Point{X: 1, Y: 2}
+
+: Ключевая конструкция type T <базовый type>. Инициализация
+
+Pointers
+
+  var s string
+  p := &s
+  s2 = *p
+
+: *& работает как shallow copy, &* так не работает.
+
+  // ok
+  var p Point
+  p.X = 1
+
+  // panic
+  var pp *Point
+  pp.X = 1
+
+* The Go Programming Language
+
+.image book.jpg
+
+Всего 400 страниц.
+
+* Документация
+
+.link https://golang.org/doc/effective_go.html Effective Go
+.link https://golang.org/pkg/ Документация стандартной библиотеки
+.link https://golang.org/doc/faq Go FAQ
+.link https://github.com/golang/go/wiki/CodeReviewComments Code Review Comments
+
+* Setup Go project
+
+* Install go
+
+.link https://go.dev/doc/install https://go.dev/doc/install
+
+- *GOROOT* -- where go distribution is installed
+- *GOPATH* -- where all libraries are stored
+
+* Init project
+
+  # mkdir -p 00-intro/myproject/cmd/fav
+  # cat 00-intro/myproject/cmd/fav/main.go
+  package main
+
+  func   main()    {
+   fmt.Printf("my favourite number is %d\n", 42)
+  }
+
+* Create module
+
+  # go mod init github.com/pkositsyn/myproject
+  go: creating new go.mod: module github.com/pkositsyn/myproject
+  # cat go.mod
+  module github.com/pkositsyn/myproject
+
+  go 1.25.5
+
+- *package* -- collection of source files in the same directory that are compiled together
+- *module* -- collection of related Go packages that are released together
+- github.com/pkositsyn/myproject -- *module*path*, the import path prefix for all packages within the module
+
+* Run program
+
+- *go*run* compiles and runs the main package comprising the named Go source files.
+
+  # go run myproject/cmd/fav/main.go
+  # command-line-arguments
+  main.go:6:2: undefined: fmt
+
+* Install goimports
+
+  # go install golang.org/x/tools/cmd/goimports
+  # tree -L 3 $GOPATH
+  /home/kositsyn-pa/go
+  ├── bin
+  │   └── goimports
+  └── pkg
+      └── mod
+          └── github.com
+
+  # export PATH=$GOPATH/bin:$PATH
+
+* Formatting
+
+Fix imports and format file.
+
+  # goimports -w myproject/
+  # cat myproject/cmd/fav/main.go
+  package main
+  
+  import "fmt"
+  
+  func main() {
+  	fmt.Printf("my favourite number is %d\n", 42)
+  }
+
+Compile and run.
+
+  # go run cmd/fav
+  my favourite number is 42
+
+* More on formatting
+
+- *gofmt* -- gofmt formats Go programs
+- *go*fmt* -- runs the command 'gofmt -l -w'
+- *goimports* -- updates Go import lines, adding missing ones and removing unreferenced ones; also formats your code
+
+* Go build
+
+  # go build cmd/fav
+  # ./fav
+  my favourite number is 42
+
+- *go*build* -- compiles the packages named by the import paths along with their dependencies, but it does not install the results.
+
+* Cross-compilation
+
+- *GOARCH* -- target compilation architecture, e.g. amd64, arm
+- *GOOS* --  target operating system, e.g. linux, darwin, windows
+
+* Installing main package
+
+  # go install github.com/pkositsyn/myproject/cmd/fav
+  # tree -L 3 $GOPATH
+  /home/kositsyn-pa/go
+  ├── bin
+  │   ├── fav
+  │   └── goimports
+  └── pkg
+      └── mod
+          └── github.com
+
+Layout
+
+- *$GOPATH/bin* -- executable files
+- *$GOPATH/pkg/mod* -- source files for modules e.g. .go
+
+Run installed binary.
+
+  # $GOPATH/bin/fav
+  my favourite number is 42
+
+* Use subpackage
+
+  # cat main.go
+  package main
+
+  import "github.com/pkositsyn/myproject/internal/fav"
+
+  func main() {
+      fav.Print()
+  }
+
+  # go run cmd/fav
+  # my favourite number is 42
+  
+
+* Add external dependency
+
+  # cat fav.go
+  package fav
+
+  import (
+    "fmt"
+
+    "github.com/google/uuid"
+  )
+
+  func Print() {
+    fmt.Printf("my favourite uuid is %s\n", uuid.New())
+  }
+
+* Update go.mod
+
+  # go mod tidy
+  go: finding module for package github.com/google/uuid
+  go: found github.com/google/uuid in github.com/google/uuid v1.6.0
+  # go run cmd/fav
+  my favourite uuid is 6b702928-359d-4cb6-8aa0-2097c2012d1d
+
+Requirements are stored in go.mod.
+
+  # cat go.mod
+  module github.com/pkositsyn/myproject
+
+  go 1.25.5
+
+  require github.com/google/uuid v1.6.0
+
+- *go*mod*tidy* makes sure go.mod matches the source code in the module
+
+* Modules store
+
+Modules are downloaded to *$GOPATH/pkg/mod*.
+
+  # tree -L 2 $GOPATH/pkg/mod/github.com/google
+  ...
+  ├── go-cmp@v0.4.0
+  │   ├── cmp
+  │   ├── CONTRIBUTING.md
+  │   ├── go.mod
+  │   ├── go.sum
+  │   ├── LICENSE
+  │   └── README.md
+  ├── go-cmp@v0.5.5
+  │   ├── cmp
+  │   ├── CONTRIBUTING.md
+  │   ├── go.mod
+  │   ├── go.sum
+  │   ├── LICENSE
+  │   └── README.md
+  ...
+
+* Go sum
+
+- *go.sum* -- stores the expected cryptographic hashes of the content of specific module versions
+
+  # cat go.sum
+  github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+  github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+
+* Go command
+
+  # go help
+  Go is a tool for managing Go source code.
+  
+  Usage:
+  	go command [arguments]
+  
+  The commands are:
+  	build       compile packages and dependencies
+  	clean       remove object files and cached files
+  	doc         show documentation for package or symbol
+  	env         print Go environment information
+  	bug         start a bug report
+  	fix         update packages to use new APIs
+  	fmt         gofmt (reformat) package sources
+  	generate    generate Go files by processing source
+  	get         download and install packages and dependencies
+  	install     compile and install packages and dependencies
+  	list        list packages
+  	run         compile and run Go program
+  	test        test packages
+  	tool        run specified go tool
+  	version     print Go version
+  	vet         report likely mistakes in packages
+  ...
+
+* Go help
+
+Use *go*help*[command]* for more information about a command.
+
+  # go help env
+  usage: go env [-json] [var ...]
+  
+  Env prints Go environment information.
+  
+  By default env prints information as a shell script
+  (on Windows, a batch file). If one or more variable
+  names is given as arguments, env prints the value of
+  each named variable on its own line.
+  
+  The -json flag prints the environment in JSON format
+  instead of as a shell script.
+  
+  For more about environment variables, see 'go help environment'.
+
+* Go env
+
+  # go env
+  GOARCH="amd64"
+  GOBIN=""
+  GOCACHE="/root/.cache/go-build"
+  GOEXE=""
+  GOHOSTARCH="amd64"
+  GOHOSTOS="linux"
+  GOOS="linux"
+  GOPATH="/go"
+  GORACE=""
+  GOROOT="/usr/local/go"
+  GOTMPDIR=""
+  GOTOOLDIR="/usr/local/go/pkg/tool/linux_amd64"
+  GCCGO="gccgo"
+  CC="gcc"
+  CXX="g++"
+  CGO_ENABLED="1"
+  CGO_CFLAGS="-g -O2"
+  CGO_CPPFLAGS=""
+  CGO_CXXFLAGS="-g -O2"
+  CGO_FFLAGS="-g -O2"
+  CGO_LDFLAGS="-g -O2"
+  PKG_CONFIG="pkg-config"
+  GOGCCFLAGS="-fPIC -m64 -pthread -fmessage-length=0 -gno-record-gcc-switches"
+
+* Go list
+
+- *go*list* -- lists the packages named by the import paths, one per line.
+
+List packages.
+
+  # go list github.com/verytable/hello
+  github.com/verytable/hello
+
+List package files.
+
+  # go list -f {{.GoFiles}} github.com/verytable/hello
+  [main.go]
+
+List package imports.
+
+  # go list -f {{.Imports}} github.com/verytable/hello
+  [fmt github.com/verytable/string rsc.io/sampler]
+
+Run 'go help list' to see all format options.
+
+* Go mod graph
+
+- *go*mod*graph* prints the module requirement graph
+
+  # go mod graph
+  github.com/verytable/hello github.com/google/go-cmp@v0.5.5
+  github.com/google/go-cmp@v0.5.5 golang.org/x/xerrors@v0.0.0-20191204190536-9bdfabe68543
+
+* Go mod why
+
+- *go*mod*why* shows a shortest path in the import graph from the main module to the package
+
+  # go mod why  golang.org/x/xerrors
+  # golang.org/x/xerrors
+  github.com/verytable/hello
+  github.com/google/go-cmp/cmp
+  github.com/google/go-cmp/cmp.test
+  github.com/google/go-cmp/cmp/cmpopts
+  golang.org/x/xerrors
+
+* Go mod vendor
+
+- *go*mod*vendor* -- copies module requirements to ./vendor directory
+
+Vendor dependencies.
+
+  # go mod vendor
+  # tree -L 3 ./vendor
+  ./vendor
+  ├── github.com
+  │   └── google
+  │       └── go-cmp
+  └── modules.txt
+
+* Install dependencies
+
+- *go*get* -- downloads the packages named by the import paths, along with their dependencies.
+
+  # go get golang.org/x/vgo
+  # tree -L 5 $GOPATH
+  /go
+  └── pkg
+      └── mod 
+          └── golang.org
+              └── x
+                  ├── text
+                  └── vgo
+
+- *golang.org/x* -- namespace
+- *text*, *vgo* -- projects
+
+- *go*install* -- go get + compiles and installs the packages named by the import paths.
+
+* Ссылки:
+
+.link https://go.dev/ref/mod - modules reference
+.link https://golang.org/cmd/go/ - go cmd
+.link https://play-with-go.dev/ - play-with-go
