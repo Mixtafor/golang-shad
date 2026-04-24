@@ -9,5 +9,14 @@ message PeerMeta {
   string name = 1;
 }
 
+message EmptyData {};
+
+message NewPeerData {
+  string peer_endpoint = 1;
+  PeerMeta peer_meta = 2;
+}
+
 service GossipService {
+  rpc Ping(EmptyData) returns (EmptyData);
+  rpc Update(NewPeerData) returns (EmptyData);
 }
